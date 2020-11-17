@@ -156,14 +156,17 @@ typedef struct {
 
 /*
  * Relocation entries.
+ * Relocations that don't need an addend field.
+ * 重定位入口
  */
-/* Relocations that don't need an addend field. */
 typedef struct {
 	Elf32_Addr	r_offset;	/* Location to be relocated. */
 	Elf32_Word	r_info;		/* Relocation type and symbol index. */
 } Elf32_Rel;
 
-/* Relocations that need an addend field. */
+/**
+ * Relocations that need an addend field. 
+ */
 typedef struct {
 	Elf32_Addr	r_offset;	/* Location to be relocated. */
 	Elf32_Word	r_info;		/* Relocation type and symbol index. */
@@ -204,8 +207,9 @@ typedef struct {
 #define	ELF32_M_SIZE(info)	((unsigned char)(info))
 #define	ELF32_M_INFO(sym, size)	(((sym)<<8)+(unsigned char)(size))
 
-/*
- *	Hardware/Software capabilities entry
+/**
+ * Hardware/Software capabilities entry
+ * 软硬件能力入口
  */
 typedef struct {
 	Elf32_Word	c_tag;		/* how to interpret value */
@@ -223,13 +227,13 @@ typedef struct {
 	// 符号的名字，但并不是一个字符串，而是一个指向字符串表的索引值(index)，在字符串表中对应位置上的字符串就是
 	// 该符号名字的实际文本
 	Elf32_Word	st_name;	/* String table index of name. */
-	// 符号的值。这个值其实没有固定的类型，它可能代表一个数值，也可以是一 个地址，具体是什么要看上下文:
+	// 符号的值。这个值其实没有固定的类型，它可能代表一个数值，也可以是一个地址，具体是什么要看上下文:
 	// 对于不同的目标文件类型，符号表项的 st_value 的含义略有不同: 
 	// • 在重定位文件中，如果一个符号对应的节的索引值是SHN_COMMON，st_value 值是这个节内容的字节对齐数。
 	// • 在重定位文件中，如果一个符号是已定义的，那么它的st_value值 是该符号的起始地址在其所在节中的偏移量，
-	// 而其所在的节的索引由 st_shndx 给出。
-	// • 在可执行文件和共享库文件(so)中，st_value不再是一个节内的偏移量， 而是一个虚拟地址，直接指向符号所
-	// 在的内存位置。这种情况下，st_shndx 就不再需要了。
+	//   而其所在的节的索引由 st_shndx 给出。
+	// • 在可执行文件和共享库文件(so)中，st_value不再是一个节内的偏移量，而是一个虚拟地址，直接指向符号所
+	//   在的内存位置。这种情况下，st_shndx 就不再需要了.
 	Elf32_Addr	st_value;	/* Symbol value. */
 	// 符号的大小。各种符号的大小各不相同，比如一个对象的大小就是它实际占用的字节数。如果一个符号的大小为 0 或
 	// 者大小未知，则这个值为 0
