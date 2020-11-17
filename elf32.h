@@ -32,6 +32,16 @@
 #include <stdint.h>
 #include "elf_common.h"
 
+// - .got & .got.plt分析
+// .text中变化的部分放到.data中去，这样.text中剩下的就是不变的内容，就可以装载到虚拟内存的任何位置，
+// 那代码段中变化的内容是什么？主要包括了对外部变量和函数的引用：
+// .got     外部变量的地址是放在 .got 中的
+// .got.plt 外部函数的地址是放在 .got.plt 中的
+// 
+// 
+// - 延时绑定（PLT）
+// 
+
 /*
  * ELF definitions common to all 32-bit architectures.
  */
@@ -104,7 +114,7 @@ typedef struct {
 	Elf32_Half	e_shstrndx;	/* Section name strings section：节头表中所有节名字符串表 的索引(index) */
 } Elf32_Ehdr; // elf文件头
 
-/*
+/**
  * Section header.
  * readelf -S xxx.so
  */
@@ -127,7 +137,7 @@ typedef struct {
 	Elf32_Word	sh_entsize;	/* Size of each entry in section. */
 } Elf32_Shdr; // section header table中的一个item: 节头
 
-/*
+/**
  * Program header.
  * elf文件被加载映射后的运行时视图
  */
@@ -142,11 +152,17 @@ typedef struct {
 	Elf32_Word	p_align;	/* Alignment in memory and file. */
 } Elf32_Phdr;
 
-/*
+/**
+ * 动态连接器(段segment)，保存了动态链接器所需要的基本信息
  * Dynamic structure.  The ".dynamic" section contains an array of them.
  * 属于运行视图，包含了elf中其他各个section的内存位置等信息
  */
 typedef struct {
+	// d_tag=DT_SYMTAB 动态链接符号表.dynsym的地址,    由d_ptr指向
+	// d_tag=DT_STRTAB 动态链接字符串.dynstr的地址,    由d_ptr指向
+	// d_tag=DT_STRSZ  动态链接字符串大小.dynsym的地址 由d_val表示
+	// d_tag=DT_HASH   动态链接hash表地址             由d_ptr指向
+	// ......
 	Elf32_Sword	d_tag;		/* Entry type. */
 	union {
 		Elf32_Word	d_val;	/* Integer value. */
@@ -154,12 +170,18 @@ typedef struct {
 	} d_un;
 } Elf32_Dyn;
 
-/*
+/**
+ * 重定位段
  * Relocation entries.
  * Relocations that don't need an addend field.
- * 重定位入口
+ * .rel.data 数据段的重定位表
+ * .rel.text 代码段的重定位表
+ * .rel.plt  对函数引用的修正，它所修正的位置位于.got.plt中
+ * .rel.dyn  对数据引用的修正，它所修正的位置位于.got及数据段
  */
 typedef struct {
+	// 指向全局符号表中的某个项，也就是全局符号表中某项的地址，
+	// 地址中的值是真实的函数地址，由动态链接器给出
 	Elf32_Addr	r_offset;	/* Location to be relocated. */
 	Elf32_Word	r_info;		/* Relocation type and symbol index. */
 } Elf32_Rel;
@@ -214,8 +236,8 @@ typedef struct {
 typedef struct {
 	Elf32_Word	c_tag;		/* how to interpret value */
 	union {
-		Elf32_Word	c_val;
-		Elf32_Addr	c_ptr;
+		Elf32_Word c_val;
+		Elf32_Addr c_ptr;
 	} c_un;
 } Elf32_Cap;
 

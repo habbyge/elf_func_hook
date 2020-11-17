@@ -3,6 +3,41 @@
  * 负责解析elf文件
  */
 
+/**
+ * - ELF基础知识
+ * ELF(Executable Linkable Format)是Linux下的可执行格式，与windows下的PE(Portable Executable)格式一样，
+ * 都是COFF(Common File Format)文件格式的变种。在Linux下除了可执行文件，编译过程中产生的目标文件(.o文件)，动
+ * 态链接文件(.so文件)，静态链接库文件(.a文件)，核心转储文件(Core Dump File)都按照ELF格式存储。
+ * 
+ * elf文件格式见: ./Elf文件格式.png，由高地址->低地址是:
+ * Elf-header
+ *  -> Segment header table(运行时): 连续的文件节映射到运行时存储器端
+ *  -> 只读存储器段(代码段): .init/.text/.rodata
+ *  -> 读写存储器段(代码段): .data/.bss
+ *  -> 不加载到存储器的符号表和调试信息: .symtab/.debug/.line/.strtab/Section Header table(描述目标文件节)
+ * .data 数据段，存放已经初始化的全局/静态变量.
+ * .bss(Block Started by Symbol，本意是以符号开头的块儿)，存放未初始化的全局变量和静态变量，因为这些变量在程序加
+ * 载的时候都会被初始化为零，所以不需要存放实际的数据，只需要预留位置就可以了.
+ * .text 代码段，存放源代码编译后的机器指令.
+ * .rodata 只读数据段，存放只读变量
+ * .symtab 符号表
+ * .strtab 字符串表
+ * .init 用来执行全局变量/静态变量初始化
+ * .line 源码到目标代码行的映射，只有是使用-g选项调用进行编译才会得到这张表.
+ * 其中理解elf文件格式的关键是：elf heade信息，读取使用:readelf -h fileName
+ * 
+ * Program Header Table是面向 运行时 的.
+ * Section header table是面向 链接 的.
+ * 
+ * .dynamic段：保存了动态链接器所需要的基本信息，类型是：Elf32_Dyn
+ * 
+ * 
+ * 对于ELF文件，要理解Segment(段)和Section(节)，前者是运行时视图，后者是静态视图(即未经过加载、链接过程到进程中).
+ * 
+ * 链接过程，会对符号取地址，并修正地址，即重定位.
+ * 
+ */ 
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,9 +56,9 @@
 // FILE *fopen(const char *filename, const char *modes)
 FILE* (*old_fopen) (const char* filename, const char* modes);
 
-FILE* new_fopen(const char *filename, const char *modes) {
+FILE* new_fopen(const char* filename, const char* modes) {
   printf("[+] New call fopen.\n");
-  if (*(uint32_t *) old_fopen == -1) {
+  if (*(uint32_t*) old_fopen == -1) {
     printf("error.\n");
   }
   return old_fopen(filename, modes);
