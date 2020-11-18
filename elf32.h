@@ -61,27 +61,51 @@ typedef Elf32_Sword	Elf32_Ssize;
 #define EI_NIDENT 16
 
 /**
- * 非常棒的ELF文件总结：https://blog.csdn.net/feglass/article/details/51469511
+ * // 非常棒的ELF文件总结：
+ * https://blog.csdn.net/feglass/article/details/51469511
+ * 
+ * 
  * 
  * ELF header.
  * 命令：readelf -h xxx.so
  * - ELF header: 描述整个文件的组织
- * - Program Header Table: 描述文件中的各种segments，用来告诉系统如何创建进程映像的
+ * - Program Header Table: 描述文件中的各种segments，用来告诉系统如何创建进程映像的，包括：系统创建进程内存映像
+ *   所需要的信息.
  * - sections(节) 或者 segments(段): segments是从运行的角度来描述elf文件，sections是从链接的角度来描述elf文件，
  *   也就是说，在链接阶段，我们可以忽略program header table来处理此文件，在运行阶段可以忽略section header table
  *   来处理此程序（所以很多加固手段删除了section header table.   从图中我们也可以看出，segments与sections是包含
- *   的关系，一个segment(段)包含若干个section(节)
- * - Section Header Table: 包含了文件各个section的属性信息
+ *   的关系，一个segment(段)包含若干个section(节).
+ *   section包含了代码、数据、符号、字符串等各种各样必不可少的信息.
+ * - Section Header Table: 包含了文件各个section的属性信息，用于描述section的表，每个section都在这里占一个表项，
+ *   一般section header table是位于section后边的。如果文件用来链接的话，section header table必须存在.
  * 
  * - 首先需要知道的是，一个程序从源码到被执行，当中经历了3个过程:
  * 编译: 将.c文件编译成.o文件，不关心.o文件之间的联系
  * 静态链接: 将所有.o文件合并成一个.so或a.out文件，处理所有.o文件节区(section)在目标文件中的布局
  * 动态链接：将.so或a.out文件加载到内存，处理加载文件在的内存中的布局
+ * 
+ * - ELF文件有两个视图: "链接视图" 和 "执行视图"，一开始学习ELF文件格式的时候对没有整体的概念，对这两个视图很是纠结，
+ *   了解了整个文件结构以后再看这两个视图就容易理解了。初步了解阶段就先简单粗暴的记住：ELF文件执行可以没有
+ *   Section Header Table，但是必须有Program Header Table，链接时（包括obj链接和动态库链接）必须有
+ *   Section Header Table.
+ * 
+ * 通常将Section称为节，将Program Header称为Segment（段）.
+ * Elf执行不需要section header table但必须要program header table，我尝试将所有的section header设置为0，
+ * 程序依然可以执行.
+ * Elf链接不需要Program Header Table，但必须要section header table，因为可重定位文件（obj文件）中没有
+ * program header table，但是有section header table，并且一个动态库so文件如果将section header table
+ * 全部设置为0的话，同样链接不成功，因为链接过程中查找符号是依赖section查找的.
+ * 这也就是为什么elf文件图中，链接视图中program header table是optional（可选的），而执行视图中
+ * section header table是optional（可选的）.
+ * 
+ * 
+ * 
  */
 typedef struct {
 	// ELF 标识，是一个 16 字节大小的数组，其各个索引位置的字节数据有固定的含义
 	//【16字节】ident ”身份“的意思，elf文件的最开始16字节：
-	// 前4个字节(e_ident[EI_MAG0] ~ e_ident[EI_MAG3]) 的内容固定为 0x7f、’E’、’L’、’F’，标识这是一个ELF文件
+	// 前4个字节(e_ident[EI_MAG0] ~ e_ident[EI_MAG3]) 的内容固定为 0x7f、’E’、’L’、’F’，标识这是一个ELF文件，
+	// 魔数，可以直接将文件缓冲区指针强转为 unsigned int 与宏定义 #define ELFMAG "\177ELF" 判断是否相等
     // 第5字节(e_ident[EI_CLASS]) 指明文件类别：0（无效目标文件）；1（32 位目标文件）；2（64 位目标文件）
     // 第6字节(e_ident[EI_DATA]) 指明字节序，规定该文件是大端还是小端：0（无效编码格式）；1（小端）；2（大端）
     // 第7字节(e_ident[EI_VERSION]) 指明 ELF 文件头的版本。
@@ -94,7 +118,10 @@ typedef struct {
 	Elf32_Half	e_machine;	
 	Elf32_Word	e_version;	/* ELF format version. */
 
-	Elf32_Addr	e_entry;	/* Entry point: 指明程序入口的虚拟地址，是指该elf文件被加载到进程控件后，入口程序
+	// 程序入口点的虚拟地址，也就是OEP，（此处需要注意，当elf文件的e_type为ET_EXEC时，这里的e_entry存放的是
+	// 虚拟地址VA，如果e_type是ET_DYN时（不仅仅动态库，可执行文件也会是ET_DYN，即开启了随机基址的可执行程序），
+	// 那这里存放的就是RVA，加载到内存中后还要加上imagebase）.
+	Elf32_Addr	e_entry;	/* Entry point: 指明程序入口的虚拟地址，是指该elf文件被加载到进程空间后，入口程序
 							   在进程地址空间里的地址，对于可执行程序文件来说，当ELF文件完成加载之后，程序将从这
 							   里开始运行;而对于其它文件来说，这个值应该是 0 */
 							   
@@ -120,6 +147,7 @@ typedef struct {
 	/* Number of section header entries. 节头表中item个数*/ // section header table数组大小
 	Elf32_Half	e_shnum;	
 
+    // 很特殊的一个字段：节头字符串表在节表中的索引位置
 	// 节头名字符串表(实际上也是一个section)在 section header table 中的索引，用于定位每一个section名称
 	// 的字符串表，获取section名字符串表的section之后，再遍历section header table，根据 
 	// Elf32_Ehdr->e_shentsize大小读取到Elf32_Shdr中，so库基地址 + Elf32_Shdr->sh_addr 即是该section

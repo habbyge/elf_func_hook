@@ -8,6 +8,7 @@
  * ELF(Executable Linkable Format)是Linux下的可执行格式，与windows下的PE(Portable Executable)格式一样，
  * 都是COFF(Common File Format)文件格式的变种。在Linux下除了可执行文件，编译过程中产生的目标文件(.o文件)，动
  * 态链接文件(.so文件)，静态链接库文件(.a文件)，核心转储文件(Core Dump File)都按照ELF格式存储。
+ * .o文件，也被叫做 “重定向文件”，是汇编器生成的；
  * 
  * elf文件格式见: ./Elf文件格式.png，由高地址->低地址是:
  * Elf-header
