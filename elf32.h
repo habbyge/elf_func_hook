@@ -64,10 +64,8 @@ typedef Elf32_Sword	Elf32_Ssize;
  * // 非常棒的ELF文件总结：
  * https://blog.csdn.net/feglass/article/details/51469511
  * 
- * 
- * 
  * ELF header.
- * 命令：readelf -h xxx.so
+ * 命令：readelf -h xxx.so，如图所示：""
  * - ELF header: 描述整个文件的组织
  * - Program Header Table: 描述文件中的各种segments，用来告诉系统如何创建进程映像的，包括：系统创建进程内存映像
  *   所需要的信息.
@@ -98,8 +96,22 @@ typedef Elf32_Sword	Elf32_Ssize;
  * 这也就是为什么elf文件图中，链接视图中program header table是optional（可选的），而执行视图中
  * section header table是optional（可选的）.
  * 
+ * 程序头表（Program Header Table），如果存在的话，告诉系统如何创建进程映像。
+ * 节区头表（Section Header Table）包含了描述文件节区的信息，比如大小、偏移等。
  * 
+ * 通过执行命令 "readelf -S android_server" 来查看该可执行文件中有哪些section
+ * 执行命令 "readelf –segments android_server"，可以查看该文件的执行视图
  * 
+ * - 那么为什么需要区分两种不同视图？
+ * 当ELF文件被加载到内存中后，系统会将多个具有相同权限（flg值）section合并一个segment。操作系统往往以页为基本单位
+ * 来管理内存分配，一般页的大小为 4KB 大小。同时，内存的权限管理的粒度也是以页为单位，页内的内存是具有同样的权限等属
+ * 性，并且操作系统对内存的管理往往追求高效和高利用率这样的目标。ELF文件在被映射时，是以系统的页长度为单位的，那么每
+ * 个section在映射时的长度都是系统页长度的整数倍，如果section的长度不是其整数倍，则导致多余部分也将占用一个页。而
+ * 我们从上面的例子中知道，一个ELF文件具有很多的section，那么会导致内存浪费严重。这样可以减少页面内部的碎片，节省了
+ * 空间，显著提高内存利用率。
+ * 
+ * 我们关注的重点是:
+ * - 对于 .o文件(Relocatable File)来说：TODO: ing......
  */
 typedef struct {
 	// ELF 标识，是一个 16 字节大小的数组，其各个索引位置的字节数据有固定的含义
@@ -112,7 +124,11 @@ typedef struct {
     // 第8字节~第16字节(从 e_ident[EI_PAD] 到 e_ident[EI_NIDENT-1]) 之间的 9 个字节保留。
 	unsigned char e_ident[EI_NIDENT];	/* File identification. */ 
 
-   	//【2字节】文件类型：常见的：1（可重定位文件：“.o 文件”）；2（可执行文件）；3（共享库文件：“.so 文件”）
+  //【2字节】文件类型：常见的:
+	// 1（可重定位（Relocatable）文件：“.o 文件”），不需要执行，因此e_entry字段为0，且没有Program Header Table等执行视图
+	// 2（可执行文件）；
+	// 3（共享库文件：“.so 文件”）
+	// 不同类型的ELF文件的Section也有较大区别，比如只有Relocatable File有.strtab节
 	Elf32_Half	e_type;		/* File type: 可定位文件.o；so库；可执行文件 */
 	/* Machine architecture：elf文件适用的处理器体系结构，例如：0(未知体系结构)、3(EM_386，Intel体系结构) */
 	Elf32_Half	e_machine;	
@@ -158,17 +174,22 @@ typedef struct {
 
 /**
  * Section header.
- * readelf -S xxx.so
+ * 对应的命令是："readelf -S xxx.so"，如图："so中有哪些section.jpg"
+ * 一般位于整个elf文件的末尾.
  */
 typedef struct {
-	// section的名字，这里其实是一个索引(index)，指出section的名字存储在 .shstrtab(节头名符串表) 的什么位置.
-	// .shstrtab是一个存储所有section名、在ELF文件中的偏移量等信息的字符串表
-	Elf32_Word	sh_name;	/* Section name (index into the section header string table). */
+	// section的名字，这里其实是一个索引(index/key)，指出section的名字存储在 .shstrtab(节头名符串
+	// 表)的什么位置，.shstrtab 是一个存储所有section名、在ELF文件中的偏移量等信息的字符串表.
+	// 对应(readelf -S x.so)第一列的 Name 字段，有：.got、.rel.plt、plt等
+	Elf32_Word	sh_name;	/* Section name (index into the section header string table).*/
+	// 对应第2列：Type字段，有：PROGBITS、HASH、REL等
 	Elf32_Word	sh_type;	/* Section type. */
+	// 对应最后一列: eg: R/RW/W
 	Elf32_Word	sh_flags;	/* Section flags. */
 
 	// 加载到内存后的虚拟内存相对地址，相对于该so库文件加载到进程中的基地址而言的
-	// 如果此section需要映射(加载)到进程空间(例如：.got/.plt)，此成员指定映射的起始地址。如不需映射，此值为0
+	// 如果此section需要映射(加载)到进程空间(例如：.got/.plt)，此成员指定映射的起始地址。
+	// 如不需映射，此值为0
 	Elf32_Addr	sh_addr;	/* Address in memory image. */ 
 	Elf32_Off	sh_offset;	/* Offset in file. */
 	// 此 section 的字节大小。如果 section 类型为 SHT_NOBITS，就不用管 sh_size 了。
@@ -181,16 +202,21 @@ typedef struct {
 
 /**
  * Program header.
- * elf文件被加载映射后的运行时视图
+ * Elf文件被加载映射后的运行时视图，每个程序头(item)其实都是segment(段).
+ * 该结构体中的字段对应，执行命令 "readelf –segments xxx.so"，可以查看该文件的执行视图
+ * 中的字段，例如：“so的执行视图-Segments.jpg”，生成的信息，除了包括如下struct中的字段外，
+ * 还包括了 Section to Segment mapping信息(Segment可能包括>=1个section)，可以看出：
+ * segment是section的一个集合，sections按照一定规则映射到segment.
  */
 typedef struct {
+	// 对应第1个字段：segment的类型，有：PHDR、INTERP、LOAD等
 	Elf32_Word	p_type;		/* Entry type. */
 	Elf32_Off	p_offset;	/* File offset of contents. */
 	Elf32_Addr	p_vaddr;	/* Virtual address in memory image. */
 	Elf32_Addr	p_paddr;	/* Physical address (not used). */
 	Elf32_Word	p_filesz;	/* Size of contents in file. */
 	Elf32_Word	p_memsz;	/* Size of contents in memory. */
-	Elf32_Word	p_flags;	/* Access permission flags. */
+	Elf32_Word	p_flags;	/* Access permission flags. eg: R/RW/W */
 	Elf32_Word	p_align;	/* Alignment in memory and file. */
 } Elf32_Phdr;
 

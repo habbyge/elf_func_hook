@@ -82,6 +82,7 @@ void* get_module_base(pid_t pid, const char* module_name) {
   // 打开文件/proc/pid/maps，获取指定pid进程加载的内存模块信息，每一行格式是：
   // 78f6898000-78f6899000 r--p 00000000 fd:00 335  /apex/com.android.runtime/lib64/bionic/libdl.so
   fp = fopen(filename, "r");
+
   if (fp != NULL) {
       // 每次一行，读取文件 /proc/pid/maps中内容
       while (fgets(line, sizeof(line), fp)) {
