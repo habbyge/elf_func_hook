@@ -60,9 +60,23 @@ typedef Elf32_Sword	Elf32_Ssize;
 
 #define EI_NIDENT 16
 
-/*
+/**
+ * 非常棒的ELF文件总结：https://blog.csdn.net/feglass/article/details/51469511
+ * 
  * ELF header.
- * readelf -h xxx.so
+ * 命令：readelf -h xxx.so
+ * - ELF header: 描述整个文件的组织
+ * - Program Header Table: 描述文件中的各种segments，用来告诉系统如何创建进程映像的
+ * - sections(节) 或者 segments(段): segments是从运行的角度来描述elf文件，sections是从链接的角度来描述elf文件，
+ *   也就是说，在链接阶段，我们可以忽略program header table来处理此文件，在运行阶段可以忽略section header table
+ *   来处理此程序（所以很多加固手段删除了section header table.   从图中我们也可以看出，segments与sections是包含
+ *   的关系，一个segment(段)包含若干个section(节)
+ * - Section Header Table: 包含了文件各个section的属性信息
+ * 
+ * - 首先需要知道的是，一个程序从源码到被执行，当中经历了3个过程:
+ * 编译: 将.c文件编译成.o文件，不关心.o文件之间的联系
+ * 静态链接: 将所有.o文件合并成一个.so或a.out文件，处理所有.o文件节区(section)在目标文件中的布局
+ * 动态链接：将.so或a.out文件加载到内存，处理加载文件在的内存中的布局
  */
 typedef struct {
 	// ELF 标识，是一个 16 字节大小的数组，其各个索引位置的字节数据有固定的含义
