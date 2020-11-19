@@ -156,7 +156,7 @@ int hook_fopen() {
   printf("[+] String table offset is %u, size is %u", shdr.sh_offset, shdr.sh_size);
 
   // 为保存ELF32文件的所有的节区的名称字符串申请内存空间: .shstrtab 类型的section
-  char* string_table = (char *) malloc(shdr.sh_size);
+  char* string_table = (char*) malloc(shdr.sh_size);
   // 定位到具体存放elf32文件的所有的"节区"的名称字符串的文件偏移处
   lseek(fd, shdr.sh_offset, SEEK_SET);
   // 从elf32内存文件中读取所有的节区的名称字符串到申请的内存空间中
@@ -182,10 +182,10 @@ int hook_fopen() {
       // 获取节区(section header table)的名称字符串在保存所有节区的名称字符串段 .shstrtab 中的序号
       // section 的名字。这里其实是一个索引，指出 section 的名字存储在 .shstrtab 的什么位置。
       // .shstrtab 是一个存储所有 section 名字的字符串表。
-      int name_idx = shdr.sh_name; 
+      int name_idx = shdr.sh_name;
       // 判断节区的名称是否为 ".got.plt" 或者 ".got" ，其中 .plt 是函数链接表；.got 是全局偏移表
       if (strcmp(&(string_table[name_idx]), ".got.plt") == 0 
-          || strcmp(&(string_table[name_idx]), ".got") == 0) {
+          || strcmp(&(string_table[name_idx]), ".got") == 0) { // .got是全局符号表
 
         // 获取节区 ".got" 或者 ".got.plt" 在so内存中实际数据存放地址
         out_addr = *((uint32_t*) base_addr) + shdr.sh_addr;
@@ -229,7 +229,7 @@ int hook_fopen() {
               printf("mprotect false.\n");
               return -1;
             }
-                      
+
             break;
             // 此时，目标函数的调用地址已经被Hook了
           } else if (got_item == *(uint32_t *) new_fopen) {
