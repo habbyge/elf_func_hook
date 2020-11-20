@@ -151,17 +151,17 @@ int hook_fopen() {
   // elf32文件中定位到存放每个节区名称的字符串表的信息结构体位置.shstrtab
   lseek(fd, shdr_addr + stridx * shent_size, SEEK_SET); // 定位到节表(section header table)中字符串
   // section的地址偏移处，读取elf32文件中的描述每个节区的信息的结构体（这里是保存elf32文件的每个节区的名称字符串的）
-  read(fd, &shdr, shent_size); // 读取字符串section到Elf32_Shdr中
+  read(fd, &shdr, shent_size); // 读取 字符串section头 到Elf32_Shdr中
   // 41159, size is 254
   printf("[+] String table offset is %u, size is %u", shdr.sh_offset, shdr.sh_size);
 
   // 为保存ELF32文件的所有的节区的名称字符串申请内存空间: .shstrtab 类型的section
   char* string_table = (char *) malloc(shdr.sh_size);
-  // 定位到具体存放elf32文件的所有的"节区"的名称字符串的文件偏移处
+  // 从 字符串节头 中获取 字符串节在elf文件中的偏移量，定位到具体存放ELF文件的所有的"节区"的名称字符串的文件偏移处
   lseek(fd, shdr.sh_offset, SEEK_SET);
   // 从elf32内存文件中读取所有的节区的名称字符串到申请的内存空间中
   // 得到字符串表(实际上是session header table中的一个section)中存储的所有字符串，其中就包括section名
-  read(fd, string_table, shdr.sh_size); 
+  read(fd, string_table, shdr.sh_size); // 读取 字符串节
 
   // 重新设置elf32文件的文件偏移为节区信息结构的起始文件偏移处，为了遍历section header table做准备
   lseek(fd, shdr_addr, SEEK_SET);
@@ -192,6 +192,7 @@ int hook_fopen() {
         // 获取节区 ".got" 或者 ".got.plt" 的大小
         out_size = shdr.sh_size;
         printf("[+] out_addr = %x, out_size = %x\n", out_addr, out_size);
+
         int j = 0;
         // 遍历节区 ".got" 或者 ".got.plt" 获取保存的全局的函数调用地址
         for (j = 0; j < out_size; j += 4) {
@@ -250,6 +251,9 @@ int hook_fopen() {
   close(fd);
 }
 
+/**
+ * 这里解析，是基于 链接视图 的，因此是基于Section(节)来解析的
+ */
 int hook_entry(char* a) {
   // LOGD("[+] Start hooking.\n");
   printf("Start hooking.\n");

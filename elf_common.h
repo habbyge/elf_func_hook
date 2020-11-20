@@ -125,8 +125,12 @@ typedef struct {
 } Elf_GNU_Hash_Header;
 #endif
 
-/* Indexes into the e_ident array.  Keep synced with
-   http://www.sco.com/developers/gabi/latest/ch4.eheader.html */
+/**
+ * Indexes into the e_ident array.  Keep synced with
+ * http://www.sco.com/developers/gabi/latest/ch4.eheader.html 
+ * 
+ * 对应ELf Header中的e_ident[EI_NIDENT]，即前16个字节
+ */
 #define	EI_MAG0		0	/* Magic number, byte 0. */
 #define	EI_MAG1		1	/* Magic number, byte 1. */
 #define	EI_MAG2		2	/* Magic number, byte 2. */
@@ -196,18 +200,24 @@ typedef struct {
 			 (ehdr).e_ident[EI_MAG2] == ELFMAG2 && \
 			 (ehdr).e_ident[EI_MAG3] == ELFMAG3)
 
-/* Values for e_type. */
+/**
+ * Values for e_type. 
+ * e_type表示elf文件的类型
+ */
 #define	ET_NONE		0	/* Unknown type. */
-#define	ET_REL		1	/* Relocatable. */
+#define	ET_REL		1	/* Relocatable. .o文件 */
 #define	ET_EXEC		2	/* Executable. */
-#define	ET_DYN		3	/* Shared object. */
-#define	ET_CORE		4	/* Core file. */
+#define	ET_DYN		3	/* Shared object. .so文件 */
+#define	ET_CORE		4	/* Core file. 转储文件 */
 #define	ET_LOOS		0xfe00	/* First operating system specific. */
 #define	ET_HIOS		0xfeff	/* Last operating system-specific. */
 #define	ET_LOPROC	0xff00	/* First processor-specific. */
 #define	ET_HIPROC	0xffff	/* Last processor-specific. */
 
-/* Values for e_machine. */
+/**
+ * Values for e_machine. 
+ * 目标体系结构类型
+ */
 #define	EM_NONE		0	/* Unknown machine. */
 #define	EM_M32		1	/* AT&T WE32100. */
 #define	EM_SPARC	2	/* Sun SPARC. */

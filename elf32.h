@@ -63,6 +63,7 @@ typedef Elf32_Sword	Elf32_Ssize;
 /**
  * // 非常棒的ELF文件总结：
  * https://blog.csdn.net/feglass/article/details/51469511
+ * https://blog.csdn.net/mergerly/article/details/94585901
  * 
  * ELF header.
  * 命令：readelf -h xxx.so，如图所示：""
@@ -110,8 +111,19 @@ typedef Elf32_Sword	Elf32_Ssize;
  * 我们从上面的例子中知道，一个ELF文件具有很多的section，那么会导致内存浪费严重。这样可以减少页面内部的碎片，节省了
  * 空间，显著提高内存利用率。
  * 
- * 我们关注的重点是:
- * - 对于 .o文件(Relocatable File)来说：TODO: ing......
+ * - 在ELF Header中我们需要重点关注以下几个字段:
+ * 1. e_entry 表示程序入口地址
+ * 2. e_ehsize ELF Header结构大小
+ * 3. e_phoff、e_phentsize、e_phnum：描述Program Header Table的偏移、大小、结构
+ * 4. e_shoff、e_shentsize、e_shnum：描述Section Header Table的偏移、大小、结构
+ * 5. e_shstrndx 这一项描述的是字符串表在Section Header Table中的索引，值25表示的是
+ *    Section Header Table中第25项是字符串表（String Table）
+ * 6. 编译后比较固定的字段: e_ident、e_machine、e_version、e_entry、e_flags、e_ehsize
+ * 7. 目前e_ehsize=52字节，e_shentsize=40字节，e_phentsize=32字节，这些值都是固定值，某些加固
+ *    会修改这些值造成静态解析失败，可以修改回这些固定值.
+ * 8. 整个so的大小 = e_shoff + e_shnum * sizeof(e_shentsize) + 1，因为节头表位于Elf文件的末尾一项.
+ * 9. e_shstrndx一般等于e_shnum - 1
+ * 10. e_phoff = ELF头的大小，因为程序头表一栏位于ELF头的后面一项
  */
 typedef struct {
 	// ELF 标识，是一个 16 字节大小的数组，其各个索引位置的字节数据有固定的含义
@@ -136,7 +148,9 @@ typedef struct {
 
 	// 程序入口点的虚拟地址，也就是OEP，（此处需要注意，当elf文件的e_type为ET_EXEC时，这里的e_entry存放的是
 	// 虚拟地址VA，如果e_type是ET_DYN时（不仅仅动态库，可执行文件也会是ET_DYN，即开启了随机基址的可执行程序），
-	// 那这里存放的就是RVA，加载到内存中后还要加上imagebase）.
+	// 那这里存放的就是RVA，加载到内存中后还要加上imagebase; .o文件(重定向文件)为0x0，因为.o文件是面向链接视图的，
+	// 无需加载到进程中，因此为0x0；
+	// 所谓程序进入点是指当程序真正执行起来的时候，其第1条要运行的指令的运行时地址.
 	Elf32_Addr	e_entry;	/* Entry point: 指明程序入口的虚拟地址，是指该elf文件被加载到进程空间后，入口程序
 							   在进程地址空间里的地址，对于可执行程序文件来说，当ELF文件完成加载之后，程序将从这
 							   里开始运行;而对于其它文件来说，这个值应该是 0 */
@@ -150,7 +164,7 @@ typedef struct {
 	// 它没有定义任何标志位，所以 e_flags 应该为 0。
 	Elf32_Word	e_flags;	/* Architecture-specific flags. */
 
-	// 此字段表明 ELF 文件头的大小，以字节为单位
+	// 此字段表明 ELF Header 的大小，以字节为单位
 	Elf32_Half	e_ehsize;	/* Size of ELF header in bytes. elf文件头大小*/
 	// 此字段表明在程序头表中每一个表项的大小，以字节为单位
 	Elf32_Half	e_phentsize;	/* Size of program header entry. 程序头表中item大小*/
@@ -176,21 +190,27 @@ typedef struct {
  * Section header.
  * 对应的命令是："readelf -S xxx.so"，如图："so中有哪些section.jpg"
  * 一般位于整个elf文件的末尾.
+ * 一个Segment包含了>=1个Section.
  */
 typedef struct {
+	// 节区名，是节区头部字符串表节区（Section Header String Table Section）的索引。
+	// 名字是一个 NULL 结尾的字符串.
 	// section的名字，这里其实是一个索引(index/key)，指出section的名字存储在 .shstrtab(节头名符串
 	// 表)的什么位置，.shstrtab 是一个存储所有section名、在ELF文件中的偏移量等信息的字符串表.
 	// 对应(readelf -S x.so)第一列的 Name 字段，有：.got、.rel.plt、plt等
-	Elf32_Word	sh_name;	/* Section name (index into the section header string table).*/
+	Elf32_Word	sh_name; /*Section name (index into the section header string table)*/
 	// 对应第2列：Type字段，有：PROGBITS、HASH、REL等
 	Elf32_Word	sh_type;	/* Section type. */
 	// 对应最后一列: eg: R/RW/W
 	Elf32_Word	sh_flags;	/* Section flags. */
 
-	// 加载到内存后的虚拟内存相对地址，相对于该so库文件加载到进程中的基地址而言的
-	// 如果此section需要映射(加载)到进程空间(例如：.got/.plt)，此成员指定映射的起始地址。
-	// 如不需映射，此值为0
-	Elf32_Addr	sh_addr;	/* Address in memory image. */ 
+	// 如果节将出现在进程的内存映像中，此成员是该节的偏移量，实际地址为:
+	// 基地址(/proc/pid/maps)+sh_addr，否则，此字段为0.
+	// 加载到内存后的虚拟内存相对地址，相对于该so库文件加载到进程中的基地址而言的.
+	// 如果此section需要映射(加载)到进程空间(例如：.got/.plt)，此成员是指定映射的起始地址。
+	// 如不需映射，此值为0，这个字段是面向进程地址空间的，即该节的真实地址是: base_addr+sh_addr
+	Elf32_Addr	sh_addr; /* Address in memory image. */ 
+	// 此sectionn在文件中的偏移，这个字段是相对elf文件本身的，即面向文件的。
 	Elf32_Off	sh_offset;	/* Offset in file. */
 	// 此 section 的字节大小。如果 section 类型为 SHT_NOBITS，就不用管 sh_size 了。
 	Elf32_Word	sh_size;	/* Size in bytes. */ 
@@ -207,6 +227,7 @@ typedef struct {
  * 中的字段，例如：“so的执行视图-Segments.jpg”，生成的信息，除了包括如下struct中的字段外，
  * 还包括了 Section to Segment mapping信息(Segment可能包括>=1个section)，可以看出：
  * segment是section的一个集合，sections按照一定规则映射到segment.
+ * 一个Segment包含了>=1个Section.
  */
 typedef struct {
 	// 对应第1个字段：segment的类型，有：PHDR、INTERP、LOAD等
@@ -248,14 +269,14 @@ typedef struct {
  * .rel.dyn  对数据引用的修正，它所修正的位置位于.got及数据段
  */
 typedef struct {
-	// 指向全局符号表中的某个项，也就是全局符号表中某项的地址，
-	// 地址中的值是真实的函数地址，由动态链接器给出
+	// 指向全局符号表中的某个项，也就是全局符号表中某项的地址，地址中的值是真实的函数地址，
+	// 由动态链接器(linker)给出.
 	Elf32_Addr	r_offset;	/* Location to be relocated. */
 	Elf32_Word	r_info;		/* Relocation type and symbol index. */
 } Elf32_Rel;
 
 /**
- * Relocations that need an addend field. 
+ * Relocations that need an addend(附录、加数) field.
  */
 typedef struct {
 	Elf32_Addr	r_offset;	/* Location to be relocated. */
@@ -316,7 +337,7 @@ typedef struct {
 typedef struct {
 	// 符号的名字，但并不是一个字符串，而是一个指向字符串表的索引值(index)，在字符串表中对应位置上的字符串就是
 	// 该符号名字的实际文本
-	Elf32_Word	st_name;	/* String table index of name. */
+	Elf32_Word st_name;	/* String table index of name. */
 	// 符号的值。这个值其实没有固定的类型，它可能代表一个数值，也可以是一个地址，具体是什么要看上下文:
 	// 对于不同的目标文件类型，符号表项的 st_value 的含义略有不同: 
 	// • 在重定位文件中，如果一个符号对应的节的索引值是SHN_COMMON，st_value 值是这个节内容的字节对齐数。
@@ -324,12 +345,12 @@ typedef struct {
 	//   而其所在的节的索引由 st_shndx 给出。
 	// • 在可执行文件和共享库文件(so)中，st_value不再是一个节内的偏移量，而是一个虚拟地址，直接指向符号所
 	//   在的内存位置。这种情况下，st_shndx 就不再需要了.
-	Elf32_Addr	st_value;	/* Symbol value. */
+	Elf32_Addr st_value;	/* Symbol value. */
 	// 符号的大小。各种符号的大小各不相同，比如一个对象的大小就是它实际占用的字节数。如果一个符号的大小为 0 或
 	// 者大小未知，则这个值为 0
-	Elf32_Word	st_size;	/* Size of associated object. */
-	unsigned char	st_info;	/* Type and binding information. */
-	unsigned char	st_other;	/* Reserved (not used). */
+	Elf32_Word st_size;	/* Size of associated object. */
+	unsigned char st_info;	/* Type and binding information. */
+	unsigned char st_other;	/* Reserved (not used). */
 	Elf32_Half	st_shndx;	/* Section index of symbol. */
 } Elf32_Sym; // 符号表
 

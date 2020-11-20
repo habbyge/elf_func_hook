@@ -1,0 +1,48 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "${default}"
+            ],
+            "defines": [],
+            "macFrameworkPath": [
+                "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
+            ],
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64"
+        },
+        {
+            // 配置名称，会显示在状态栏上
+            "name": "Android", 
+
+            // VS Code搜索include头文件的路径(后面会被Cmake tools取代)
+            "includePath": [ 
+                "/Users/habbyge/Library/Android/sdk/ndk/21.3.6528147/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include",
+                "${workspaceFolder}/src",
+                "${default}"
+            ],
+
+            "defines": [],
+
+            "macFrameworkPath": [
+                "/Users/habbyge/Library/Android/sdk/ndk/21.3.6528147/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include",
+                "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
+            ],
+
+            // 编译器路径，这里我选择的llvm的clang。这也是目前NDK官方指定的，其他编译器都被Google删掉了
+            "compilerPath": "/Users/habbyge/Library/Android/sdk/ndk/21.2.6472646/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++",
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "clang-x64",
+
+            // 这个配置是告诉vscode，让Cmake Tools插件根据CMakeLists.txt的配置来指定C/C++的代码环境，
+            // 如在CMakeLists.txt中配置了 link_directories(dir_xx)命令，VS Code就能正确识别出 
+            // #include<dir_xx/xxx.h>头文件。同时也就取代了上面的 includePath配置。
+            "configurationProvider": "ms-vscode.cmake-tools"
+        }
+    ],
+    "version": 4
+}
