@@ -124,6 +124,19 @@ typedef Elf32_Sword	Elf32_Ssize;
  * 8. 整个so的大小 = e_shoff + e_shnum * sizeof(e_shentsize) + 1，因为节头表位于Elf文件的末尾一项.
  * 9. e_shstrndx一般等于e_shnum - 1
  * 10. e_phoff = ELF头的大小，因为程序头表一栏位于ELF头的后面一项
+
+ * 我们关注的一些重要的Section(节)是：符号表(.dynsym)、重定位表(rel.got/rel.plt等)、GOT表(.got)等
+ * 1. .dynsym 符号表
+ * 记录了文件中所有符号，所谓符号就是经过修饰了得函数名或者变量名，不同编译器有不同的规则，例如：
+ * _ZL15global_static_a，就是global_static_a变量经过修饰而来。
+ * 2. 字符串表 。dynstr
+ * 存放着所有符号的名称字符串
+ * 3. 重定位表
+ * 首先先理解 “重定位” 的概念，程序从代码到可执行文件的这个过程中，要经历编译器、汇编器和链接器(Linker)对代码的处理，
+ * 然而编译器和汇编器通常为每个文件创建程序地址是从0开始的目标代码，但是几乎没有计算机会允许从地址0加载你的程序. 如果
+ * 一个程序是由多个子程序组成的，那么所有的子程序必须加载到不同互不重叠的地址上。 “重定位” 就是为程序不同部分分配加载
+ * 地址，调整程序中数据和代码以反映所分配地址的过程，简而言之：把程序中的各个部分映射到合理的地址上来。再换句话说，重定
+ * 位就是把符号引用和符号定义进行连接的过程.
  */
 typedef struct {
 	// ELF 标识，是一个 16 字节大小的数组，其各个索引位置的字节数据有固定的含义
@@ -228,6 +241,12 @@ typedef struct {
  * 还包括了 Section to Segment mapping信息(Segment可能包括>=1个section)，可以看出：
  * segment是section的一个集合，sections按照一定规则映射到segment.
  * 一个Segment包含了>=1个Section.
+ * 
+ * “程序头部” 描述与程序执行直接相关的目标文件结构信息。用来在文件中定位各个Segment(段)的映像，
+ * 同时包含其他一些用来为程序创建映像所必须的信息.
+ * 
+ * 只对 “可执行文件” 和 “so文件” 有意义，每个结构描述了一个段或者系统准备程序执行所必须的其他信息，
+ * so文件的Segment包含一个或多个Section。
  */
 typedef struct {
 	// 对应第1个字段：segment的类型，有：PHDR、INTERP、LOAD等
@@ -249,7 +268,7 @@ typedef struct {
 typedef struct {
 	// d_tag=DT_SYMTAB 动态链接符号表.dynsym的地址,    由d_ptr指向
 	// d_tag=DT_STRTAB 动态链接字符串.dynstr的地址,    由d_ptr指向
-	// d_tag=DT_STRSZ  动态链接字符串大小.dynsym的地址 由d_val表示
+	// d_tag=DT_STRSZ  动态链接字符串大小.dynsym的地址  由d_val表示
 	// d_tag=DT_HASH   动态链接hash表地址             由d_ptr指向
 	// ......
 	Elf32_Sword	d_tag;		/* Entry type. */
@@ -272,6 +291,10 @@ typedef struct {
 	// 指向全局符号表中的某个项，也就是全局符号表中某项的地址，地址中的值是真实的函数地址，
 	// 由动态链接器(linker)给出.
 	Elf32_Addr	r_offset;	/* Location to be relocated. */
+	// 要重定位的符号表引用，以及实施重定位类型(哪些bit需要修改，以及如何计算他们的取值)，其中，.rel.dyn
+	// 重定位类型一般是 R_386_GLOB_DAT 和 R_386_COPY；.rel.plt 为 R_386_JUMP_SLOT.
+	// 对 r_info 字段使用 ELF32_R_TYPE 宏运算可得到重定位类型，使用 ELF32_R_SYM 可得到符号在符号表中
+	// 的索引值.
 	Elf32_Word	r_info;		/* Relocation type and symbol index. */
 } Elf32_Rel;
 
@@ -284,19 +307,23 @@ typedef struct {
 	Elf32_Sword	r_addend;	/* Addend. */
 } Elf32_Rela;
 
-/* Macros for accessing the fields of r_info. */
+/** 
+ * Macros for accessing the fields of r_info. 
+ */
 #define ELF32_R_SYM(info)	((info) >> 8)
 #define ELF32_R_TYPE(info)	((unsigned char)(info))
 
-/* Macro for constructing r_info from field values. */
+/**
+ * Macro for constructing r_info from field values. 
+ */
 #define ELF32_R_INFO(sym, type)	(((sym) << 8) + (unsigned char)(type))
 
-/*
+/**
  *	Note entry header
  */
 typedef Elf_Note Elf32_Nhdr;
 
-/*
+/**
  *	Move entry
  */
 typedef struct {
@@ -307,7 +334,7 @@ typedef struct {
 	Elf32_Half	m_stride;	/* stride info */
 } Elf32_Move;
 
-/*
+/**
  *	The macros compose and decompose values for Move.r_info
  *
  *	sym = ELF32_M_SYM(M.m_info)
@@ -330,9 +357,9 @@ typedef struct {
 	} c_un;
 } Elf32_Cap;
 
-/*
+/**
  * Symbol table entries.
- * 对应于elf文件中的.dynsym
+ * 对应于elf文件中的.dynsym，命令：readelf -p 28 a.out
  */
 typedef struct {
 	// 符号的名字，但并不是一个字符串，而是一个指向字符串表的索引值(index)，在字符串表中对应位置上的字符串就是
@@ -354,17 +381,25 @@ typedef struct {
 	Elf32_Half	st_shndx;	/* Section index of symbol. */
 } Elf32_Sym; // 符号表
 
-/* Macros for accessing the fields of st_info. */
+/**
+ * Macros for accessing the fields of st_info. 
+ */
 #define ELF32_ST_BIND(info)		((info) >> 4)
 #define ELF32_ST_TYPE(info)		((info) & 0xf)
 
-/* Macro for constructing st_info from field values. */
+/**
+ * Macro for constructing st_info from field values. 
+ */
 #define ELF32_ST_INFO(bind, type)	(((bind) << 4) + ((type) & 0xf))
 
-/* Macro for accessing the fields of st_other. */
+/**
+ * Macro for accessing the fields of st_other. 
+ */
 #define ELF32_ST_VISIBILITY(oth)	((oth) & 0x3)
 
-/* Structures used by Sun & GNU symbol versioning. */
+/**
+ * Structures used by Sun & GNU symbol versioning. 
+ */
 typedef struct {
 	Elf32_Half	vd_version;
 	Elf32_Half	vd_flags;
