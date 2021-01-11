@@ -114,9 +114,8 @@ int hook_fopen() {
   old_fopen = fopen; // 保存被Hook的目标函数的原始调用地址
   printf("[+] Orig fopen = %p\n", old_fopen);
   
-  int fd;
   // 打开内存模块文件"/data/app-lib/com.bbk.appstore-2/libvivosgmain.so"
-  fd = open(LIB_PATH, O_RDONLY);
+  int fd = open(LIB_PATH, O_RDONLY);
   if (fd == -1) {
       // LOGD("error.\n");
       printf("error.\n");

@@ -358,13 +358,15 @@ typedef struct {
 } Elf32_Cap;
 
 /**
+ * 符号表(Section)
  * Symbol table entries.
  * 对应于elf文件中的.dynsym，命令：readelf -p 28 a.out
  */
 typedef struct {
-	// 符号的名字，但并不是一个字符串，而是一个指向字符串表的索引值(index)，在字符串表中对应位置上的字符串就是
-	// 该符号名字的实际文本
+	// 符号的名字，但并不是一个字符串，而是一个指向字符串表的索引值(index)，
+	// 在字符串表(Section)中对应位置上的字符串就是该符号名字的实际文本.
 	Elf32_Word st_name;	/* String table index of name. */
+	
 	// 符号的值。这个值其实没有固定的类型，它可能代表一个数值，也可以是一个地址，具体是什么要看上下文:
 	// 对于不同的目标文件类型，符号表项的 st_value 的含义略有不同: 
 	// • 在重定位文件中，如果一个符号对应的节的索引值是SHN_COMMON，st_value 值是这个节内容的字节对齐数。
